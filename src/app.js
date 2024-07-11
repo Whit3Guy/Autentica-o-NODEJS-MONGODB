@@ -4,9 +4,34 @@ const app = express();
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const env = require('../.env')
 const User = require('./models/User') 
 const porta = 3301;
+
+
+//credenciais
+const uri = process.env.Database_Connection;
+const secret = process.env.SECRET
+
+//function for checkToken
+function check_token(req, res, next){
+  const auth_header = req.headers['authorization']
+  const tokeni = auth_header && auth_header.split(" ")[1]
+
+  if(!tokeni){
+      res.status(401).json({msg:"acesso negado"})
+      return
+  }
+
+  try{
+     jwt.verify(tokeni, secret )  
+     next()
+  }
+  catch(err){
+      res.status(400).json({msg:"token invalido"})
+     console.log(err)
+  }
+}
+
 
 // Config json response
 
@@ -17,15 +42,28 @@ app.use(
     express.urlencoded({extended:true})
 )
 
-//credenciais
-const uri = process.env.Database_Connection;
-const secret = process.env.SECRET
+//Private Routes
 
-//Public Routes
-app.get("/", async (req, res)=>{
-    res.status(200).json({status:"foi"})
+app.get("/auth/:id",check_token, async (req, res)=>{
+    const id = req.params.id
+
+try{
+    const users = await User.findById(id, "-password")
+    if(!users){
+        res.status(404).json({msg:"Usuário não existe"})
+        console.log(id)
+        return 
+    }
+    res.status(200).json(users)
+}
+catch(err){
+    console.log(err)
+    res.status(500).json({msg: "erro no nosso servidor"})
+}
 
 })
+
+//Public Routes
 
 //Register User
 
@@ -106,7 +144,21 @@ app.post("/auth/login", async (req, res)=>{
         res.status(404).json({msg:"senha invalida"})
         return
     }
-    
+
+    try{
+        const token = jwt.sign({
+                id:user._id
+            }, secret,
+        )
+        console.log(token)
+        res.status(200).json({msg:"autenticação feita com sucesso ",
+            token: token
+        })
+    }
+    catch(err){
+        console.log(err)
+        res.status(500).json({msg:"erro de autorização"})
+    }
     res.status(200).json({msg:`Logado com sucesso ${user.name}!`})
 })
 
